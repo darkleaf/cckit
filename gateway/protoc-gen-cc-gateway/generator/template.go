@@ -36,10 +36,6 @@ import (
 
     {{ range $i := .Imports }}{{ if not $i.Standard }}{{ $i | printf "%s\n" }}{{ end }}{{ end }}
 )
-
-type ValidatorInterface interface {
-  Validate() error
-}
 `))
 )
 
@@ -61,6 +57,10 @@ type {{ $svc.GetName }}Chaincode interface {
 {{ end }}
 }
 
+// {{ $svc.GetName }}ChaincodeResolver interface for service resolver
+type {{ $svc.GetName }}ChaincodeResolver interface {
+		{{ $svc.GetName }}Chaincode(ctx cckit_router.Context) ({{ $svc.GetName }}Chaincode, error)
+}
 
 // Register{{ $svc.GetName }}Chaincode registers service methods as chaincode router handlers
 func Register{{ $svc.GetName }}Chaincode(r *cckit_router.Group, cc {{ $svc.GetName }}Chaincode) error {
@@ -71,7 +71,7 @@ func Register{{ $svc.GetName }}Chaincode(r *cckit_router.Group, cc {{ $svc.GetNa
 
  r.{{ $method }}( {{ $svc.GetName }}Chaincode_{{ $m.GetName }}, 
 		func(ctx cckit_router.Context) (interface{}, error) {
-            if v, ok := ctx.Param().(ValidatorInterface); ok {
+            if v, ok := ctx.Param().(interface { Validate() error }); ok {
               if err := v.Validate(); err != nil {
 		        return nil, cckit_param.PayloadValidationError (err)
 	          } 
@@ -123,7 +123,7 @@ func (c *{{ $svc.GetName }}Gateway) Events(ctx context.Context) (cckit_gateway.C
 
  func (c *{{ $svc.GetName }}Gateway) {{ $m.GetName }}(ctx context.Context, in *{{$m.RequestType.GoType $m.Service.File.GoPkg.Path | goTypeName }}) (*{{ $m.ResponseType.GoType $m.Service.File.GoPkg.Path | goTypeName }}, error) {
     var inMsg interface{} = in
-    if v, ok := inMsg.(ValidatorInterface); ok {
+    if v, ok := inMsg.(interface { Validate() error }); ok {
        if err := v.Validate(); err != nil {
 		return nil, err
 	   } 
