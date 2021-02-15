@@ -113,7 +113,7 @@ func (cs *ChaincodeService) Invoke(ctx context.Context, in *service.ChaincodeInp
 	})
 }
 
-func (cs *ChaincodeService) Events(in *service.ChaincodeLocator, stream service.Chaincode_EventsServer) (err error) {
+func (cs *ChaincodeService) Events(in *service.ChaincodeEventLocator, stream service.Chaincode_EventsServer) (err error) {
 	var (
 		mockStub *testing.MockStub
 	)

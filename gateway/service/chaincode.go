@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"io"
 
 	"github.com/hyperledger/fabric/protos/peer"
 	"github.com/pkg/errors"
@@ -15,6 +16,7 @@ type (
 )
 
 // ChaincodeService implementation based of hlf-sdk-go
+// Can be used as component - abstraction over hyperledger fabric SDK or standalone gRPC service
 type ChaincodeService struct {
 	sdk api.Core
 }
@@ -24,11 +26,12 @@ func New(sdk api.Core) *ChaincodeService {
 }
 
 func (cs *ChaincodeService) Exec(ctx context.Context, in *ChaincodeExec) (*peer.ProposalResponse, error) {
-	if in.Type == InvocationType_QUERY {
+	switch in.Type {
+	case InvocationType_QUERY:
 		return cs.Query(ctx, in.Input)
-	} else if in.Type == InvocationType_INVOKE {
+	case InvocationType_INVOKE:
 		return cs.Invoke(ctx, in.Input)
-	} else {
+	default:
 		return nil, ErrUnknownInvocationType
 	}
 }
@@ -49,7 +52,7 @@ func (cs *ChaincodeService) Invoke(ctx context.Context, in *ChaincodeInput) (*pe
 		Do(ctx, DoOptionFromContext(ctx)...)
 
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, `failed to invoke chaincode`)
 	}
 
 	// todo: add to hlf-sdk-go method returning ProposalResponse
@@ -70,14 +73,22 @@ func (cs *ChaincodeService) Query(ctx context.Context, in *ChaincodeInput) (*pee
 		return nil, err
 	}
 
-	if resp, err := cs.sdk.Channel(in.Channel).Chaincode(in.Chaincode).Query(argSs[0], argSs[1:]...).WithIdentity(signer).Transient(in.Transient).AsProposalResponse(ctx); err != nil {
+	resp, err := cs.sdk.
+		Channel(in.Channel).
+		Chaincode(in.Chaincode).
+		Query(argSs[0], argSs[1:]...).
+		WithIdentity(signer).
+		Transient(in.Transient).
+		AsProposalResponse(ctx)
+
+	if err != nil {
 		return nil, errors.Wrap(err, `failed to query chaincode`)
-	} else {
-		return resp, nil
 	}
+	return resp, nil
+
 }
 
-func (cs *ChaincodeService) Events(in *ChaincodeLocator, stream Chaincode_EventsServer) error {
+func (cs *ChaincodeService) Events(in *ChaincodeEventLocator, stream Chaincode_EventsServer) error {
 
 	deliver, err := cs.sdk.PeerPool().DeliverClient(cs.sdk.CurrentIdentity().GetMSPIdentifier(), cs.sdk.CurrentIdentity())
 	if err != nil {
@@ -90,11 +101,21 @@ func (cs *ChaincodeService) Events(in *ChaincodeLocator, stream Chaincode_Events
 	}
 
 	for {
-		e, ok := <-events.Events()
-		if !ok {
+		select {
+
+		case <-stream.Context().Done():
 			return nil
-		}
-		if err = stream.Send(e); err != nil {
+
+		case event, ok := <-events.Events():
+			if !ok {
+				return nil
+			}
+			errS := stream.Send(event)
+			if errS == io.EOF {
+				return nil
+			}
+
+		case err := <-events.Errors():
 			return err
 		}
 	}

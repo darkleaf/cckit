@@ -5,6 +5,26 @@ package service;
 import "github.com/hyperledger/fabric/protos/peer/proposal_response.proto";
 import "github.com/hyperledger/fabric/protos/peer/chaincode_event.proto";
 
+
+enum WaitForTxCommit {
+    DEFAULT = 0;
+    // without waiting for transaction commit event
+    NONE = 1;
+    // wait for all msp id peers
+    MSPID_ALL = 2;
+    // wait for any msp id peer
+    MSPID_ANY = 3;
+    // wait for all endorsers
+    ENDORSER_ALL = 4;
+    // wait for any endorser
+    ENDORSER_ANY = 5;
+    // wait for all network peer
+    NETWORK_ALL = 6;
+    // wait for any network peer
+    NETWORK_ANY = 7;
+}
+
+// Chaincode  invocation input
 message ChaincodeInput {
     // Chaincode name
     string chaincode = 1;
@@ -19,17 +39,35 @@ message ChaincodeInput {
     // of this field are supposed to always be omitted from the transaction and
     // excluded from the ledger.
     map<string, bytes> transient = 4;
+
+    // Hint for tx commit waiting policy
+    WaitForTxCommit wait_for_tx_commit = 5;
 }
 
-message ChaincodeLocator {
+// Chaincode event locator
+message ChaincodeEventLocator {
     // Chaincode name
     string chaincode = 1;
     // Channel name
     string channel = 2;
+    // Block range
+    BlockRange block = 3;
 }
 
+message BlockRange {
+    // from block
+    int64 from = 3;
+
+    // to block
+    int64 to = 4;
+}
+
+// Invocation type
 enum InvocationType {
+    // Query / simulate only
     QUERY = 0;
+
+    // Invoke  / simulate and broadcast to orderer
     INVOKE = 1;
 }
 
@@ -38,14 +76,39 @@ message ChaincodeExec {
     ChaincodeInput input = 2;
 }
 
-// Chaincode invocation service
+// Chaincode invocation service - allow to query/invoke chaincode and subscribe to events
 service Chaincode {
     // Exec: Query or Invoke
-    rpc Exec (ChaincodeExec) returns (protos.ProposalResponse);
+    rpc Exec (ChaincodeExec) returns (protos.ProposalResponse) {
+        option (google.api.http) = {
+            post: "/exec"
+        };
+    };
     // Query chaincode on home peer. Do NOT send to orderer.
-    rpc Query (ChaincodeInput) returns (protos.ProposalResponse);
+    rpc Query (ChaincodeInput) returns (protos.ProposalResponse)  {
+        option (google.api.http) = {
+            post: "/query"
+        };
+    };
     // Invoke chaincode on peers, according to endorsement policy and the SEND to orderer
-    rpc Invoke (ChaincodeInput) returns (protos.ProposalResponse);
+    rpc Invoke (ChaincodeInput) returns (protos.ProposalResponse)  {
+        option (google.api.http) = {
+            post: "/invoke"
+        };
+    };
     // Chaincode events stream
-    rpc Events (ChaincodeLocator) returns (stream protos.ChaincodeEvent);
+    rpc Events (ChaincodeEventLocator) returns (stream protos.ChaincodeEvent) {
+        option (google.api.http) = {
+            get: "/event"
+        };
+    };
+}
+
+
+service ChaincodeEvent {
+    rpc Events (ChaincodeEventLocator) returns (stream protos.ChaincodeEvent) {
+        option (google.api.http) = {
+            get: "/event"
+        };
+    };
 }

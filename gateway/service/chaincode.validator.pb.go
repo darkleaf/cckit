@@ -20,7 +20,15 @@ func (this *ChaincodeInput) Validate() error {
 	// Validation of proto3 map<> fields is unsupported.
 	return nil
 }
-func (this *ChaincodeLocator) Validate() error {
+func (this *ChaincodeEventLocator) Validate() error {
+	if this.Block != nil {
+		if err := github_com_mwitkow_go_proto_validators.CallValidatorIfExists(this.Block); err != nil {
+			return github_com_mwitkow_go_proto_validators.FieldError("Block", err)
+		}
+	}
+	return nil
+}
+func (this *BlockRange) Validate() error {
 	return nil
 }
 func (this *ChaincodeExec) Validate() error {

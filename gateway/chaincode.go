@@ -15,16 +15,17 @@ const (
 	Invoke Action = `invoke`
 )
 
-// Chaincode interface for work with chaincode
+// Chaincode interface for work with chaincode, wrapper on ChaincodeService
 type Chaincode interface {
 	Query(ctx context.Context, fn string, args []interface{}, target interface{}) (interface{}, error)
 	Invoke(ctx context.Context, fn string, args []interface{}, target interface{}) (interface{}, error)
-	Events(ctx context.Context) (ChaincodeEventSub, error)
+	Events(ctx context.Context, blockRange *service.BlockRange) (ChaincodeEventSub, error)
 }
 
 type ChaincodeEventSub interface {
 	Context() context.Context
 	Events() <-chan *peer.ChaincodeEvent
+	Errors() <-chan error
 	Recv(*peer.ChaincodeEvent) error
 	Close()
 }
@@ -54,13 +55,14 @@ func NewChaincode(service service.Chaincode, channelName, chaincodeName string, 
 	return c
 }
 
-func (g *chaincode) Events(ctx context.Context) (ChaincodeEventSub, error) {
+func (g *chaincode) Events(ctx context.Context, blockRange *service.BlockRange) (ChaincodeEventSub, error) {
 	stream := NewChaincodeEventServerStream(ctx, g.EventOpts...)
 
 	go func() {
-		err := g.Service.Events(&service.ChaincodeLocator{
+		err := g.Service.Events(&service.ChaincodeEventLocator{
 			Channel:   g.Channel,
 			Chaincode: g.Chaincode,
+			Block:     blockRange,
 		}, &service.ChaincodeEventsServer{ServerStream: stream})
 
 		if err != nil {
